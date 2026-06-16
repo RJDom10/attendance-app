@@ -38,10 +38,18 @@ services:
       - ./frontend:/app
       - /app/node_modules        # Evitar sobreescribir node_modules del contenedor
     environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
+      - VITE_API_URL=/api/v1
     depends_on:
       - backend
     command: npm run dev -- --host 0.0.0.0
+
+  # ── Túnel Público (Cloudflare) ──────────────────────────────────────────────
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: attendance-tunnel
+    command: tunnel --url http://frontend:5173
+    depends_on:
+      - frontend
 
 volumes:
   sqlite-data:
