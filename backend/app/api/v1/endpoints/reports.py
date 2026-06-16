@@ -3,7 +3,7 @@ Endpoints de reportes de asistencia.
 """
 import csv
 import io
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -18,19 +18,19 @@ router = APIRouter()
 @router.get("/{group_id}", response_model=GroupAttendanceReport)
 def get_report(
     group_id: str,
+    min_percent: float = Query(None),
     db: Session = Depends(get_db),
     professor=Depends(deps.get_current_professor),
 ):
     """
     Reporte completo de asistencia de un grupo.
-
     Incluye por alumno:
     - Sesiones asistidas / total
     - Porcentaje de asistencia
-    - Indicador `at_risk` si está por debajo del 80%
+    - Indicador `at_risk` si está por debajo del umbral indicado (o por defecto)
     """
     try:
-        return AttendanceService.get_group_report(db, group_id)
+        return AttendanceService.get_group_report(db, group_id, min_percent)
     except AttendanceError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -38,6 +38,7 @@ def get_report(
 @router.get("/{group_id}/export/csv")
 def export_csv(
     group_id: str,
+    min_percent: float = Query(None),
     db: Session = Depends(get_db),
     professor=Depends(deps.get_current_professor),
 ):
@@ -46,7 +47,7 @@ def export_csv(
     Listo para abrir en Excel o Google Sheets.
     """
     try:
-        report = AttendanceService.get_group_report(db, group_id)
+        report = AttendanceService.get_group_report(db, group_id, min_percent)
     except AttendanceError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

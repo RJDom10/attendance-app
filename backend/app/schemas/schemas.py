@@ -105,6 +105,7 @@ class StudentCreate(BaseModel):
     first_name: str = Field(..., min_length=2, max_length=100)
     last_name: str = Field(..., min_length=2, max_length=150)
     email: Optional[EmailStr] = None
+    group_id: Optional[str] = None
 
 
 class StudentSetPIN(BaseModel):

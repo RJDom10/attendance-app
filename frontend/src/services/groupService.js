@@ -9,4 +9,8 @@ export const groupService = {
     const { data } = await api.post('/groups/', payload)
     return data
   },
+  delete: async (groupId) => {
+    const { data } = await api.delete(`/groups/${groupId}`)
+    return data
+  },
 }

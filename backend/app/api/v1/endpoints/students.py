@@ -23,13 +23,35 @@ def create_student(
     db: Session = Depends(get_db),
     professor=Depends(deps.get_current_professor),
 ):
-    """Crea un alumno individualmente."""
-    existing = db.query(Student).filter(Student.student_id == data.student_id).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Ya existe un alumno con esa matrícula")
+    """Crea un alumno individualmente y opcionalmente lo inscribe a un grupo."""
+    student = db.query(Student).filter(Student.student_id == data.student_id).first()
+    
+    if student:
+        # Si no nos pasaron group_id, y ya existe, marcamos error
+        if not data.group_id:
+            raise HTTPException(status_code=409, detail="Ya existe un alumno con esa matrícula")
+        
+        # Si sí nos pasaron group_id, checamos si ya está inscrito
+        existing_enrollment = db.query(Enrollment).filter(
+            Enrollment.student_id == student.id,
+            Enrollment.group_id == data.group_id,
+        ).first()
+        
+        if existing_enrollment:
+             raise HTTPException(status_code=409, detail="El alumno ya está inscrito en este grupo")
+    else:
+        # Crear alumno nuevo
+        default_pin = (data.student_id[-4:] + "00").zfill(6)[:6]
+        student_data = data.model_dump(exclude={"group_id"})
+        student_data["pin_hash"] = hash_password(default_pin)
+        student = Student(**student_data)
+        db.add(student)
+        db.flush()
 
-    student = Student(**data.model_dump())
-    db.add(student)
+    if data.group_id:
+        enrollment = Enrollment(student_id=student.id, group_id=data.group_id)
+        db.add(enrollment)
+
     db.commit()
     db.refresh(student)
     return student
@@ -160,3 +182,38 @@ def list_students_in_group(
         .all()
     )
     return [e.student for e in enrollments]
+
+
+@router.delete("/group/{group_id}/student/{student_id}", status_code=204)
+def unenroll_student(
+    group_id: str,
+    student_id: str,
+    db: Session = Depends(get_db),
+    professor=Depends(deps.get_current_professor),
+):
+    """
+    Desinscribe a un alumno de un grupo.
+    Elimina la relación Enrollment y también borra su asistencia previa en sesiones de ese grupo.
+    """
+    from app.models.models import Attendance, Session as ClassSession
+    
+    enrollment = db.query(Enrollment).filter(
+        Enrollment.group_id == group_id,
+        Enrollment.student_id == student_id
+    ).first()
+    
+    if not enrollment:
+        raise HTTPException(status_code=404, detail="El alumno no está inscrito en este grupo")
+    
+    # 1. Eliminar asistencias del alumno en las sesiones de este grupo
+    db.query(Attendance).filter(
+        Attendance.student_id == student_id,
+        Attendance.session_id.in_(
+            db.query(ClassSession.id).filter(ClassSession.group_id == group_id)
+        )
+    ).delete(synchronize_session=False)
+    
+    # 2. Eliminar inscripción
+    db.delete(enrollment)
+    db.commit()
+    return None

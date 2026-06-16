@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Plus, ArrowRight, Calendar } from 'lucide-react'
+import { BookOpen, Plus, ArrowRight, Calendar, Trash2 } from 'lucide-react'
 import { subjectService } from '../services/subjectService'
 import { Card, CardHeader, CardBody } from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -9,7 +9,22 @@ import Input from '../components/ui/Input'
 import { PageSpinner } from '../components/ui/Spinner'
 import toast from 'react-hot-toast'
 
-function SubjectCard({ subject }) {
+function SubjectCard({ subject, onDelete }) {
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async (e) => {
+    e.preventDefault()
+    if (!window.confirm(`¿Seguro que deseas eliminar la materia "${subject.name}"? Se borrarán todos sus grupos y asistencias.`)) {
+      return
+    }
+    setDeleting(true)
+    try {
+      await onDelete(subject.id)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div style={{
       background: 'var(--bg-surface)',
@@ -38,11 +53,21 @@ function SubjectCard({ subject }) {
           {subject.semester}
         </span>
       </div>
-      <Link to={`/subjects/${subject.id}/groups`} style={{ marginTop: 'auto' }}>
-        <Button variant="secondary" size="sm" className="w-full" iconRight={ArrowRight}>
-          Ver grupos
-        </Button>
-      </Link>
+      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+        <Link to={`/subjects/${subject.id}/groups`} style={{ flex: 1 }}>
+          <Button variant="secondary" size="sm" className="w-full" iconRight={ArrowRight}>
+            Ver grupos
+          </Button>
+        </Link>
+        <Button 
+          variant="danger" 
+          size="sm" 
+          icon={Trash2} 
+          loading={deleting}
+          onClick={handleDelete}
+          style={{ backgroundColor: 'var(--error)' }}
+        />
+      </div>
     </div>
   )
 }
@@ -95,6 +120,16 @@ export default function SubjectsPage() {
     }
   }
 
+  const handleDeleteSubject = async (id) => {
+    try {
+      await subjectService.delete(id)
+      toast.success('Materia eliminada')
+      await load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al eliminar la materia')
+    }
+  }
+
   if (loading) return <PageSpinner />
 
   return (
@@ -120,7 +155,7 @@ export default function SubjectsPage() {
         </div>
       ) : (
         <div className="grid-3">
-          {subjects.map((s) => <SubjectCard key={s.id} subject={s} />)}
+          {subjects.map((s) => <SubjectCard key={s.id} subject={s} onDelete={handleDeleteSubject} />)}
         </div>
       )}
 

@@ -44,3 +44,21 @@ def get_subject(
     if not subject:
         raise HTTPException(status_code=404, detail="Materia no encontrada")
     return subject
+
+@router.delete("/{subject_id}", status_code=204)
+def delete_subject(
+    subject_id: str,
+    db: Session = Depends(get_db),
+    professor=Depends(deps.get_current_professor),
+):
+    subject = db.query(Subject).filter(
+        Subject.id == subject_id,
+        Subject.professor_id == professor.id
+    ).first()
+    
+    if not subject:
+        raise HTTPException(status_code=404, detail="Materia no encontrada o sin permisos")
+    
+    db.delete(subject)
+    db.commit()
+    return None

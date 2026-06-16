@@ -14,12 +14,14 @@ export default function ReportPage() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [minPercent, setMinPercent] = useState(80) // Default fallback
 
   useEffect(() => {
     async function load() {
       try {
         const data = await reportService.getGroupReport(groupId)
         setReport(data)
+        setMinPercent(data.minimum_percent)
       } catch (err) {
         toast.error(err.response?.data?.detail || 'Error al cargar el reporte')
       } finally {
@@ -32,7 +34,7 @@ export default function ReportPage() {
   const handleExport = () => {
     setExporting(true)
     try {
-      reportService.exportCSV(groupId)
+      reportService.exportCSV(groupId, minPercent)
       toast.success('Descargando CSV…')
     } finally {
       setTimeout(() => setExporting(false), 2000)
@@ -42,9 +44,15 @@ export default function ReportPage() {
   if (loading) return <PageSpinner />
   if (!report) return null
 
-  const atRiskCount  = report.students.filter((s) => s.at_risk).length
-  const avgPct = report.students.length
-    ? (report.students.reduce((a, b) => a + b.attendance_percent, 0) / report.students.length).toFixed(1)
+  // Recalcular dinámicamente según el slider
+  const dynamicStudents = report.students.map((s) => ({
+    ...s,
+    at_risk: s.attendance_percent < minPercent
+  }))
+
+  const atRiskCount  = dynamicStudents.filter((s) => s.at_risk).length
+  const avgPct = dynamicStudents.length
+    ? (dynamicStudents.reduce((a, b) => a + b.attendance_percent, 0) / dynamicStudents.length).toFixed(1)
     : 0
 
   const genDate = new Date(report.generated_at).toLocaleString('es-MX', {
@@ -82,6 +90,31 @@ export default function ReportPage() {
         <StatCard icon={AlertTriangle} value={atRiskCount}        label="Alumnos en riesgo"  variant={atRiskCount > 0 ? 'danger' : 'success'} />
       </div>
 
+      {/* Slider */}
+      <Card style={{ marginBottom: '24px' }}>
+        <CardBody>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                Porcentaje mínimo de asistencia: <span style={{ color: 'var(--primary)' }}>{minPercent}%</span>
+              </label>
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                step="5" 
+                value={minPercent} 
+                onChange={(e) => setMinPercent(Number(e.target.value))}
+                style={{ width: '100%', cursor: 'pointer' }}
+              />
+            </div>
+            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', maxWidth: '250px' }}>
+              Ajusta la barra para recalcular instantáneamente quiénes están en riesgo en la tabla de abajo.
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
       {/* Risk alert */}
       {atRiskCount > 0 && (
         <div className="alert alert-warning" style={{ marginBottom: '24px' }}>
@@ -102,13 +135,13 @@ export default function ReportPage() {
           </span>
         </CardHeader>
         <CardBody style={{ padding: 0 }}>
-          {report.students.length === 0 ? (
+          {dynamicStudents.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon"><Users /></div>
               <h3>Sin alumnos en este grupo</h3>
             </div>
           ) : (
-            <AttendanceReportTable report={report} />
+            <AttendanceReportTable report={{ ...report, students: dynamicStudents, minimum_percent: minPercent }} />
           )}
         </CardBody>
       </Card>

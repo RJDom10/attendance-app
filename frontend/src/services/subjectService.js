@@ -13,4 +13,8 @@ export const subjectService = {
     const { data } = await api.post('/subjects/', payload)
     return data
   },
+  delete: async (id) => {
+    const { data } = await api.delete(`/subjects/${id}`)
+    return data
+  },
 }

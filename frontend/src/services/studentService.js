@@ -25,4 +25,8 @@ export const studentService = {
     })
     return data
   },
+  unenroll: async (groupId, studentId) => {
+    const { data } = await api.delete(`/students/group/${groupId}/student/${studentId}`)
+    return data
+  },
 }

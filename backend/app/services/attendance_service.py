@@ -147,10 +147,10 @@ class AttendanceService:
     # ── Reportes ────────────────────────────────────────────────────────────
 
     @staticmethod
-    def get_group_report(db: DBSession, group_id: str) -> GroupAttendanceReport:
+    def get_group_report(db: DBSession, group_id: str, min_percent: Optional[float] = None) -> GroupAttendanceReport:
         """
         Genera el reporte de asistencia de todos los alumnos de un grupo.
-        Calcula el porcentaje y marca quiénes están en riesgo (< 80%).
+        Calcula el porcentaje y marca quiénes están en riesgo.
         """
         from app.models.models import Subject
 
@@ -173,6 +173,8 @@ class AttendanceService:
             .filter(Enrollment.group_id == group_id)
             .all()
         )
+
+        effective_min_percent = min_percent if min_percent is not None else settings.ATTENDANCE_MINIMUM_PERCENT
 
         student_reports = []
         for enrollment in enrollments:
@@ -198,7 +200,7 @@ class AttendanceService:
                 attended_sessions=attended,
                 total_sessions=total_sessions,
                 attendance_percent=round(percent, 1),
-                at_risk=percent < settings.ATTENDANCE_MINIMUM_PERCENT,
+                at_risk=percent < effective_min_percent,
             ))
 
         # Ordenar: primero los que están en riesgo, luego por nombre
@@ -211,7 +213,7 @@ class AttendanceService:
             subject_code=subject.code if subject else "",
             semester=subject.semester if subject else "",
             total_sessions=total_sessions,
-            minimum_percent=settings.ATTENDANCE_MINIMUM_PERCENT,
+            minimum_percent=effective_min_percent,
             students=student_reports,
             generated_at=datetime.now(timezone.utc),
         )

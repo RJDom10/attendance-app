@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { studentService } from '../services/studentService'
 import { sessionService } from '../services/sessionService'
+import { groupService } from '../services/groupService'
 import { Card, CardHeader, CardBody } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
@@ -66,6 +67,7 @@ export default function GroupDetailPage() {
   const [studentModal, setStudentModal] = useState(false)
   const [newStudent, setNewStudent] = useState({ student_id: '', first_name: '', last_name: '', email: '' })
   const [addingStudent, setAddingStudent] = useState(false)
+  const [deletingGroup, setDeletingGroup] = useState(false)
 
   const load = async () => {
     try {
@@ -132,8 +134,8 @@ export default function GroupDetailPage() {
     }
     setAddingStudent(true)
     try {
-      await studentService.create({ ...newStudent, email: newStudent.email || undefined })
-      toast.success('Alumno creado')
+      await studentService.create({ ...newStudent, email: newStudent.email || undefined, group_id: groupId })
+      toast.success('Alumno agregado')
       setStudentModal(false)
       setNewStudent({ student_id: '', first_name: '', last_name: '', email: '' })
       await load()
@@ -141,6 +143,34 @@ export default function GroupDetailPage() {
       toast.error(err.response?.data?.detail || 'Error al crear alumno')
     } finally {
       setAddingStudent(false)
+    }
+  }
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este grupo? Se perderán todas las sesiones y asistencias asociadas. Esta acción no se puede deshacer.')) {
+      return
+    }
+    setDeletingGroup(true)
+    try {
+      await groupService.delete(groupId)
+      toast.success('Grupo eliminado')
+      navigate('/dashboard')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al eliminar grupo')
+      setDeletingGroup(false)
+    }
+  }
+
+  const handleUnenrollStudent = async (student) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar a ${student.first_name} ${student.last_name} de este grupo? Se perderán sus asistencias en estas sesiones.`)) {
+      return
+    }
+    try {
+      await studentService.unenroll(groupId, student.id)
+      toast.success('Alumno desinscrito correctamente')
+      await load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al desinscribir alumno')
     }
   }
 
@@ -174,6 +204,15 @@ export default function GroupDetailPage() {
           <Link to={`/reports/${groupId}`}>
             <Button variant="secondary" icon={BarChart2}>Reporte</Button>
           </Link>
+          <Button 
+            variant="danger" 
+            style={{ backgroundColor: 'var(--error)' }}
+            icon={Trash2} 
+            loading={deletingGroup}
+            onClick={handleDeleteGroup}
+          >
+            Eliminar
+          </Button>
         </div>
       </div>
 
@@ -230,6 +269,7 @@ export default function GroupDetailPage() {
                     <th>Apellidos</th>
                     <th>Correo</th>
                     <th>Estado</th>
+                    <th style={{ width: '50px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -249,6 +289,23 @@ export default function GroupDetailPage() {
                         <span className={`badge ${s.is_active ? 'badge-success' : 'badge-muted'}`}>
                           {s.is_active ? 'Activo' : 'Inactivo'}
                         </span>
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => handleUnenrollStudent(s)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '4px'
+                          }}
+                          title="Eliminar del grupo"
+                          onMouseOver={(e) => e.currentTarget.style.color = 'var(--error)'}
+                          onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))}

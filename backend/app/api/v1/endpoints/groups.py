@@ -41,3 +41,22 @@ def list_groups(
         r.total_students = count
         result.append(r)
     return result
+
+
+@router.delete("/{group_id}", status_code=204)
+def delete_group(
+    group_id: str,
+    db: Session = Depends(get_db),
+    professor=Depends(deps.get_current_professor),
+):
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    
+    # Check if the professor owns the subject of this group
+    if group.subject.professor_id != professor.id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para eliminar este grupo")
+
+    db.delete(group)
+    db.commit()
+    return None
