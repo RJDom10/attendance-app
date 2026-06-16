@@ -1,0 +1,60 @@
+name: CI — AttendanceApp
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+
+      - name: Lint con ruff
+        working-directory: ./backend
+        run: ruff check .
+
+      - name: Ejecutar tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          SECRET_KEY: test-secret-key-for-ci-only
+        run: pytest tests/ -v
+
+  frontend-build:
+    name: Frontend (Node.js)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build de producción
+        working-directory: ./frontend
+        env:
+          VITE_API_URL: http://localhost:8000/api/v1
+        run: npm run build

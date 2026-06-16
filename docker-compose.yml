@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+
+  # ── Backend FastAPI ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: attendance-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app          # Hot reload en desarrollo
+      - sqlite-data:/app/data   # Persistencia de la BD SQLite
+    environment:
+      - DATABASE_URL=sqlite:////app/data/attendance.db
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - DEBUG=true
+      - CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Frontend React ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: build
+    container_name: attendance-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules        # Evitar sobreescribir node_modules del contenedor
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  sqlite-data:
+
+# Para producción con PostgreSQL, descomentar:
+#
+#   db:
+#     image: postgres:16-alpine
+#     environment:
+#       POSTGRES_DB: attendance
+#       POSTGRES_USER: attendance_user
+#       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+#     volumes:
+#       - postgres-data:/var/lib/postgresql/data
+#     ports:
+#       - "5432:5432"
+#
+# Y cambiar en backend:
+#   DATABASE_URL=postgresql://attendance_user:${POSTGRES_PASSWORD}@db:5432/attendance
