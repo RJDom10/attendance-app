@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { ClipboardCheck, CheckCircle, AlertCircle } from 'lucide-react'
 import { attendanceService } from '../services/attendanceService'
 import Button from '../components/ui/Button'
@@ -9,19 +9,43 @@ const PIN_LENGTH = 6
 
 export default function CheckInPage() {
   const { sessionToken } = useParams()
+  const [searchParams] = useSearchParams()
+  const qrToken = searchParams.get('t')
+
   const [studentId, setStudentId] = useState('')
   const [pin, setPin] = useState(Array(PIN_LENGTH).fill(''))
-  const [status, setStatus] = useState('idle') // idle | loading | success | error
+  const [status, setStatus] = useState('validating_qr') // validating_qr | idle | loading | success | error | qr_expired | device_locked
   const [errorMsg, setErrorMsg] = useState('')
   const [studentError, setStudentError] = useState('')
+  const [formToken, setFormToken] = useState(null)
   const digitRefs = useRef([])
 
-  // Focus first PIN digit when student_id is filled
   useEffect(() => {
-    if (studentId.length >= 5) {
-      digitRefs.current[0]?.focus()
+    // 1. Check device lock
+    if (localStorage.getItem(`attendance_device_locked_${sessionToken}`)) {
+      setStatus('device_locked')
+      return
     }
-  }, [studentId])
+
+    // 2. Validate QR token
+    if (!qrToken) {
+      setStatus('qr_expired')
+      setErrorMsg('Por favor escanea el código QR proyectado en clase.')
+      return
+    }
+
+    const validate = async () => {
+      try {
+        const { form_token } = await attendanceService.verifyQrToken(qrToken)
+        setFormToken(form_token)
+        setStatus('idle')
+      } catch (err) {
+        setStatus('qr_expired')
+        setErrorMsg('El código QR ha caducado. Por favor, vuelve a escanear el código actual en la pantalla.')
+      }
+    }
+    validate()
+  }, [sessionToken, qrToken])
 
   const pinStr = pin.join('')
 
@@ -72,7 +96,8 @@ export default function CheckInPage() {
 
     setStatus('loading')
     try {
-      await attendanceService.checkIn(sessionToken, studentId.trim(), pinStr)
+      await attendanceService.checkIn(formToken, studentId.trim(), pinStr)
+      localStorage.setItem(`attendance_device_locked_${sessionToken}`, 'true')
       setStatus('success')
     } catch (err) {
       setStatus('error')
@@ -105,6 +130,38 @@ export default function CheckInPage() {
       </div>
 
       <div className="checkin-card" style={{ marginTop: '16px' }}>
+        {/* ─── Validating QR ─── */}
+        {status === 'validating_qr' && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <p style={{ color: 'var(--text-muted)' }}>Validando código QR...</p>
+          </div>
+        )}
+
+        {/* ─── QR Expired ─── */}
+        {status === 'qr_expired' && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <AlertCircle size={48} style={{ color: 'var(--danger)', margin: '0 auto 16px' }} />
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Código Inválido o Caducado
+            </h2>
+            <p style={{ color: 'var(--text-muted)' }}>{errorMsg}</p>
+          </div>
+        )}
+
+        {/* ─── Device Locked ─── */}
+        {status === 'device_locked' && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <CheckCircle size={48} style={{ color: 'var(--success)', margin: '0 auto 16px' }} />
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              Dispositivo Registrado
+            </h2>
+            <p style={{ color: 'var(--text-muted)' }}>
+              Ya se ha registrado una asistencia desde este dispositivo para esta sesión.
+              Por seguridad, solo se permite un registro por dispositivo.
+            </p>
+          </div>
+        )}
+
         {/* ─── Idle / Form ─── */}
         {(status === 'idle' || status === 'loading' || status === 'error') && (
           <>
@@ -126,7 +183,7 @@ export default function CheckInPage() {
                 id="student-id"
                 placeholder="ej. A00123456"
                 value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
+                onChange={(e) => setStudentId(e.target.value.toUpperCase().trim())}
                 error={studentError}
                 autoComplete="off"
                 autoCapitalize="none"
@@ -206,7 +263,7 @@ export default function CheckInPage() {
             <button
               style={{
                 background: 'none', border: 'none', color: 'var(--text-muted)',
-                fontSize: '0.8125rem', cursor: 'pointer', marginTop: '8px',
+                fontSize: '0.8125rem', marginTop: '16px', display: 'none' // Hidden due to device lock
               }}
               onClick={reset}
             >

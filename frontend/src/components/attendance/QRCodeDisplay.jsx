@@ -1,9 +1,35 @@
 import { QRCodeSVG } from 'qrcode.react'
 import { Copy, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useState, useEffect } from 'react'
+import { attendanceService } from '../../services/attendanceService'
 
 export default function QRCodeDisplay({ sessionToken }) {
-  const checkInUrl = `${window.location.origin}/checkin/${sessionToken}`
+  const [qrToken, setQrToken] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+    const fetchToken = async () => {
+      try {
+        const { qr_token } = await attendanceService.getQrToken(sessionToken)
+        if (mounted) setQrToken(qr_token)
+      } catch (err) {
+        console.error('Error fetching QR token', err)
+      }
+    }
+
+    fetchToken()
+    const interval = setInterval(fetchToken, 15000) // Refresh every 15s
+    return () => {
+      mounted = false
+      clearInterval(interval)
+    }
+  }, [sessionToken])
+
+  // Construct URL with the short-lived token
+  const checkInUrl = qrToken 
+    ? `${window.location.origin}/checkin/${sessionToken}?t=${qrToken}`
+    : `${window.location.origin}/checkin/${sessionToken}`
 
   const copyUrl = () => {
     navigator.clipboard.writeText(checkInUrl)

@@ -58,6 +58,20 @@ def create_refresh_token(subject: Any) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+def create_qr_token(session_token: str) -> str:
+    """Crea un token muy corto (20s) para el QR dinámico."""
+    expire = datetime.now(timezone.utc) + timedelta(seconds=20)
+    to_encode = {"exp": expire, "sub": session_token, "type": "qr"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_form_token(session_token: str) -> str:
+    """Crea un token válido por 3 minutos para completar el formulario."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=3)
+    to_encode = {"exp": expire, "sub": session_token, "type": "form"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> dict | None:
     """
     Decodifica y valida un JWT.

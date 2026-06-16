@@ -28,7 +28,7 @@ class AttendanceService:
     # ── Check-in del alumno ──────────────────────────────────────────────────
 
     @staticmethod
-    def check_in(db: DBSession, data: AttendanceCheckIn, ip_address: Optional[str] = None) -> Attendance:
+    def check_in(db: DBSession, data: AttendanceCheckIn, session_token: str, ip_address: Optional[str] = None) -> Attendance:
         """
         Registra la asistencia de un alumno.
 
@@ -47,7 +47,7 @@ class AttendanceService:
         # 1. Buscar sesión activa
         session = (
             db.query(Session)
-            .filter(Session.session_token == data.session_token)
+            .filter(Session.session_token == session_token)
             .first()
         )
         if not session:

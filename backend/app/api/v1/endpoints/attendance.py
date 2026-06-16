@@ -6,11 +6,30 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.schemas import AttendanceCheckIn, AttendanceManual, AttendanceResponse
+from app.core.security import create_qr_token, create_form_token, decode_token
+from app.schemas.schemas import AttendanceCheckIn, AttendanceManual, AttendanceResponse, QRTokenResponse, VerifyQRRequest, VerifyQRResponse
 from app.services.attendance_service import AttendanceService, AttendanceError
 from app.api.v1 import deps
 
 router = APIRouter()
+
+@router.get("/qr-token", response_model=QRTokenResponse)
+def get_qr_token(session_token: str, current_professor=Depends(deps.get_current_professor)):
+    """Genera un token corto de 15 segundos para el QR dinámico."""
+    qr_token = create_qr_token(session_token)
+    return {"qr_token": qr_token}
+
+
+@router.post("/verify-qr", response_model=VerifyQRResponse)
+def verify_qr(data: VerifyQRRequest):
+    """Valida el QR token corto y devuelve un token de formulario válido por 3 min."""
+    payload = decode_token(data.qr_token)
+    if not payload or payload.get("type") != "qr":
+        raise HTTPException(status_code=400, detail="Código QR expirado o inválido")
+    
+    session_token = payload.get("sub")
+    form_token = create_form_token(session_token)
+    return {"form_token": form_token, "session_token": session_token}
 
 
 @router.post("/check-in", response_model=AttendanceResponse, status_code=status.HTTP_201_CREATED)
@@ -21,24 +40,18 @@ def check_in(
 ):
     """
     El alumno marca su asistencia.
-
-    Este endpoint es **público** (no requiere JWT del profesor),
-    ya que es el alumno quien lo llama desde su celular.
-
-    La seguridad se garantiza por:
-    - El `session_token` (UUID) que solo existe mientras el profesor tiene la lista abierta
-    - El PIN del alumno hasheado con bcrypt
-    - Idempotencia: el mismo alumno no puede registrarse dos veces
-
-    Body:
-    - **session_token**: token UUID que proporciona el profesor (en el QR o URL)
-    - **student_id**: número de matrícula del alumno
-    - **pin**: PIN de 6 dígitos del alumno
     """
     ip = request.client.host if request.client else None
 
+    # Validar token del formulario
+    payload = decode_token(data.form_token)
+    if not payload or payload.get("type") != "form":
+        raise HTTPException(status_code=400, detail="Sesión de registro expirada. Vuelve a escanear el QR.")
+    
+    session_token = payload.get("sub")
+
     try:
-        attendance = AttendanceService.check_in(db, data, ip_address=ip)
+        attendance = AttendanceService.check_in(db, data, session_token, ip_address=ip)
     except AttendanceError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

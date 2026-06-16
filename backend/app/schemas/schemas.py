@@ -170,9 +170,19 @@ class SessionClose(BaseModel):
 # ATTENDANCE (Asistencia)
 # ══════════════════════════════════════════════════════════════════════════════
 
+class QRTokenResponse(BaseModel):
+    qr_token: str
+
+class VerifyQRRequest(BaseModel):
+    qr_token: str
+
+class VerifyQRResponse(BaseModel):
+    form_token: str
+    session_token: str
+
 class AttendanceCheckIn(BaseModel):
     """Lo que envía el alumno para marcar su asistencia."""
-    session_token: str
+    form_token: str     # Token temporal para enviar el formulario
     student_id: str     # matrícula
     pin: str = Field(..., min_length=6, max_length=6)
 
